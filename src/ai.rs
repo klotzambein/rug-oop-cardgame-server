@@ -161,3 +161,23 @@ impl AIPlayer {
         actions
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    
+    #[test]
+    fn it_plays_with_ai() {
+        let mut state = GameState::initial();
+        let mut ai0 = AIPlayer::new(0);
+        let mut ai1 = AIPlayer::new(1);
+        for _ in 0..10 {
+            ai0.play_turn(&state)
+                .into_iter()
+                .for_each(|action| state.perform_player_action(0, action).unwrap());
+            ai1.play_turn(&state)
+                .into_iter()
+                .for_each(|action| state.perform_player_action(1, action).unwrap());
+        }
+    }
+}
