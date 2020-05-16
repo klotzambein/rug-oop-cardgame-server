@@ -64,18 +64,23 @@ pub struct GameState {
 impl GameState {
     pub fn initial() -> GameState {
         let mut rng = StdRng::from_entropy();
-        let stock_pile = Pile::new_without_kings().shuffled(&mut rng);
+        let stock_pile = Pile::new()
+            .add_without_kings()
+            .add_blank_without_kings(4)
+            .shuffled(&mut rng);
         GameState {
             round_state: RoundState {
                 player: 0,
                 turn_state: TurnState::Attack,
             },
             rng,
-            discard_pile: Pile::new_empty(),
+            discard_pile: Pile::new(),
             stock_pile,
             players: vec![
                 PlayerState::initial(Suit::Heart),
                 PlayerState::initial(Suit::Spade),
+                PlayerState::initial(Suit::Diamond),
+                PlayerState::initial(Suit::Club),
             ],
         }
     }
@@ -243,7 +248,7 @@ impl PlayerState {
             house_pile_1: None,
             house_pile_2: None,
             house_pile_3: None,
-            hand: Pile::new_empty(),
+            hand: Pile::new(),
         }
     }
 

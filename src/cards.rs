@@ -1,6 +1,7 @@
 use std::{
     fmt::{Debug, Formatter},
-    slice::Iter, iter::Copied,
+    iter::Copied,
+    slice::Iter,
 };
 
 use rand::prelude::*;
@@ -12,6 +13,7 @@ pub enum Suit {
     Spade,
     Club,
     Diamond,
+    Blank,
 }
 
 impl Suit {
@@ -19,15 +21,6 @@ impl Suit {
         use Suit::*;
         static SUITS: [Suit; 4] = [Heart, Spade, Club, Diamond];
         SUITS.iter()
-    }
-
-    pub fn next(self) -> Suit {
-        match self {
-            Suit::Heart => Suit::Diamond,
-            Suit::Spade => Suit::Heart,
-            Suit::Club => Suit::Spade,
-            Suit::Diamond => Suit::Club,
-        }
     }
 }
 
@@ -119,16 +112,28 @@ pub struct Pile {
 }
 
 impl Pile {
-    pub fn new_empty() -> Pile {
+    pub fn new() -> Pile {
         Pile { cards: Vec::new() }
     }
-    pub fn new_without_kings() -> Pile {
-        let cards = Rank::iter()
-            .filter(|rank| **rank != Rank::King)
-            .flat_map(|rank| Suit::iter().map(move |suit| Card::new(*suit, *rank)))
-            .collect();
+    /// Adds a full normal card-deck without the kings.
+    pub fn add_without_kings(mut self) -> Self {
+        self.cards.extend(
+            Rank::iter()
+                .filter(|rank| **rank != Rank::King)
+                .flat_map(|rank| Suit::iter().map(move |suit| Card::new(*suit, *rank))),
+        );
 
-        Pile { cards }
+        self
+    }
+    /// Adds `n` full suits of blank cards without the kings.
+    pub fn add_blank_without_kings(mut self, n: usize) -> Self {
+        self.cards.extend(
+            Rank::iter()
+                .filter(|rank| **rank != Rank::King)
+                .flat_map(|rank| std::iter::repeat(Card::new(Suit::Blank, *rank)).take(n)),
+        );
+
+        self
     }
 
     pub fn shuffle(&mut self, rng: &mut impl Rng) {
@@ -218,7 +223,7 @@ impl SpecialPile {
     pub fn new(special_card: Card) -> SpecialPile {
         SpecialPile {
             special_card,
-            cards: Pile::new_empty(),
+            cards: Pile::new(),
         }
     }
 }
