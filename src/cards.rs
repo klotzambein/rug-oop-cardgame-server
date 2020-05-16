@@ -1,6 +1,6 @@
 use std::{
     fmt::{Debug, Formatter},
-    slice::Iter,
+    slice::Iter, iter::Copied,
 };
 
 use rand::prelude::*;
@@ -193,8 +193,8 @@ impl Pile {
         self.cards.is_empty()
     }
 
-    pub fn iter(&self) -> Iter<'_, Card> {
-        self.cards.iter()
+    pub fn iter(&self) -> Copied<Iter<'_, Card>> {
+        self.cards.iter().copied()
     }
 }
 

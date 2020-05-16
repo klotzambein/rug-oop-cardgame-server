@@ -1,7 +1,9 @@
-use crate::cards::{Card, Pile, Rank, SpecialPile, Suit};
+use std::slice::Iter;
 
 use rand::prelude::*;
 use rand::rngs::StdRng;
+
+use crate::cards::{Card, Pile, Rank, SpecialPile, Suit};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoundState {
@@ -20,6 +22,14 @@ pub enum HousePile {
     One,
     Two,
     Three,
+}
+
+impl HousePile {
+    pub fn iter() -> Iter<'static, HousePile> {
+        use HousePile::*;
+        static HOUSE_PILES: [HousePile; 3] = [One, Two, Three];
+        HOUSE_PILES.iter()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,11 +54,11 @@ pub enum PlayerAction {
 
 #[derive(Debug, Clone)]
 pub struct GameState {
-    round_state: RoundState,
     rng: StdRng,
-    discard_pile: Pile,
-    stock_pile: Pile,
-    players: Vec<PlayerState>,
+    pub round_state: RoundState,
+    pub discard_pile: Pile,
+    pub stock_pile: Pile,
+    pub players: Vec<PlayerState>,
 }
 
 impl GameState {
@@ -105,7 +115,7 @@ impl GameState {
         }
     }
 
-    pub fn get_mut_player_state(&mut self, player: Suit) -> Option<&mut PlayerState> {
+    pub fn get_mut_player_by_suit(&mut self, player: Suit) -> Option<&mut PlayerState> {
         self.players.iter_mut().find(|ps| ps.suit == player)
     }
 
@@ -131,7 +141,7 @@ impl GameState {
                     .take()
                     .ok_or("chose non existent house pile to attack")?;
                 let target_player = self
-                    .get_mut_player_state(target_player)
+                    .get_mut_player_by_suit(target_player)
                     .ok_or("attack target player does not exist")?;
                 let target_pile = target_player.first_house_pile();
                 if let Some(target_pile_ref) = target_pile {
@@ -217,12 +227,12 @@ impl GameState {
 
 #[derive(Debug, Clone)]
 pub struct PlayerState {
-    suit: Suit,
-    king_pile: SpecialPile,
-    house_pile_1: Option<SpecialPile>,
-    house_pile_2: Option<SpecialPile>,
-    house_pile_3: Option<SpecialPile>,
-    hand: Pile,
+    pub suit: Suit,
+    pub king_pile: SpecialPile,
+    pub house_pile_1: Option<SpecialPile>,
+    pub house_pile_2: Option<SpecialPile>,
+    pub house_pile_3: Option<SpecialPile>,
+    pub hand: Pile,
 }
 
 impl PlayerState {
@@ -241,6 +251,14 @@ impl PlayerState {
         match pile {
             PlayerPile::KingPile => Some(&mut self.king_pile),
             PlayerPile::HousePile(pile) => self.get_mut_house_pile(pile).as_mut(),
+        }
+    }
+
+    pub fn get_house_pile(&self, pile: HousePile) -> &Option<SpecialPile> {
+        match pile {
+            HousePile::One => &self.house_pile_1,
+            HousePile::Two => &self.house_pile_2,
+            HousePile::Three => &self.house_pile_3,
         }
     }
 
@@ -273,5 +291,19 @@ impl PlayerState {
         } else {
             None
         }
+    }
+
+    pub fn house_piles(&self) -> Vec<(HousePile, &SpecialPile)> {
+        let mut piles = Vec::with_capacity(3);
+        if let Some(p) = &self.house_pile_1 {
+            piles.push((HousePile::One, p));
+        }
+        if let Some(p) = &self.house_pile_2 {
+            piles.push((HousePile::Two, p));
+        }
+        if let Some(p) = &self.house_pile_3 {
+            piles.push((HousePile::Three, p));
+        }
+        piles
     }
 }
