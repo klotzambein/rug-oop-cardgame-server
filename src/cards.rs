@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::{
     fmt::{Debug, Formatter},
     iter::Copied,
@@ -24,6 +25,32 @@ impl Suit {
     }
 }
 
+impl FromStr for Suit {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "h" => Suit::Heart,
+            "s" => Suit::Spade,
+            "c" => Suit::Club,
+            "d" => Suit::Diamond,
+            "b" => Suit::Blank,
+            _ => Err(())?,
+        })
+    }
+}
+
+impl ToString for Suit {
+    fn to_string(&self) -> String {
+        match self {
+            Suit::Heart => "h".to_owned(),
+            Suit::Spade => "s".to_owned(),
+            Suit::Club => "c".to_owned(),
+            Suit::Diamond => "d".to_owned(),
+            Suit::Blank => "b".to_owned(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rank {
     King = 13,
@@ -39,6 +66,48 @@ pub enum Rank {
     Three = 3,
     Two = 2,
     Ace = 1,
+}
+
+impl FromStr for Rank {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "k" => Rank::King,
+            "q" => Rank::Queen,
+            "j" => Rank::Jack,
+            "1" => Rank::Ten,
+            "9" => Rank::Nine,
+            "8" => Rank::Eight,
+            "7" => Rank::Seven,
+            "6" => Rank::Six,
+            "5" => Rank::Five,
+            "4" => Rank::Four,
+            "3" => Rank::Three,
+            "2" => Rank::Two,
+            "a" => Rank::Ace,
+            _ => Err(())?,
+        })
+    }
+}
+
+impl ToString for Rank {
+    fn to_string(&self) -> String {
+        match self {
+            Rank::King => "k".to_owned(),
+            Rank::Queen => "q".to_owned(),
+            Rank::Jack => "j".to_owned(),
+            Rank::Ten => "1".to_owned(),
+            Rank::Nine => "9".to_owned(),
+            Rank::Eight => "8".to_owned(),
+            Rank::Seven => "7".to_owned(),
+            Rank::Six => "6".to_owned(),
+            Rank::Five => "5".to_owned(),
+            Rank::Four => "4".to_owned(),
+            Rank::Three => "3".to_owned(),
+            Rank::Two => "2".to_owned(),
+            Rank::Ace => "a".to_owned(),
+        }
+    }
 }
 
 impl Rank {
@@ -91,6 +160,25 @@ impl Rank {
 pub struct Card {
     pub suit: Suit,
     pub rank: Rank,
+}
+
+impl FromStr for Card {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != 2 {
+            Err(())?
+        }
+        Ok(Card {
+            suit: Suit::from_str(&s[0..1])?,
+            rank: Rank::from_str(&s[1..2])?,
+        })
+    }
+}
+
+impl ToString for Card {
+    fn to_string(&self) -> String {
+        format!("{}{}", self.suit.to_string(), self.rank.to_string())
+    }
 }
 
 impl Debug for Card {

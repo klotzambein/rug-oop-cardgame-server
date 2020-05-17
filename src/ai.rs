@@ -1,6 +1,7 @@
 use crate::cards::{Card, Rank};
 use crate::game::{GameState, HousePile, PlayerAction, PlayerPile};
 
+#[derive(Clone, Debug)]
 pub struct AIPlayer {
     player_id: usize,
 }
@@ -87,8 +88,7 @@ impl AIPlayer {
         }
     }
 
-    pub fn play_turn(&mut self, state: &GameState) -> Vec<PlayerAction> {
-        let mut state = state.clone();
+    pub fn play_turn(&mut self, mut state: GameState) -> Vec<PlayerAction> {
         let mut actions = Vec::new();
 
         // Do attacks:
@@ -174,20 +174,20 @@ mod test {
             let mut ai1 = AIPlayer::new(1);
             let mut ai2 = AIPlayer::new(2);
             let mut ai3 = AIPlayer::new(3);
-            
+
             for _ in 0..50 {
-                ai0.play_turn(&state)
-                    .into_iter()
-                    .for_each(|action| state.perform_player_action(0, action).unwrap());
-                ai1.play_turn(&state)
-                    .into_iter()
-                    .for_each(|action| state.perform_player_action(1, action).unwrap());
-                ai2.play_turn(&state)
-                    .into_iter()
-                    .for_each(|action| state.perform_player_action(2, action).unwrap());
-                ai3.play_turn(&state)
-                    .into_iter()
-                    .for_each(|action| state.perform_player_action(3, action).unwrap());
+                ai0.play_turn(state.clone()).into_iter().for_each(|action| {
+                    state.perform_player_action(0, action).unwrap();
+                });
+                ai1.play_turn(state.clone()).into_iter().for_each(|action| {
+                    state.perform_player_action(1, action).unwrap();
+                });
+                ai2.play_turn(state.clone()).into_iter().for_each(|action| {
+                    state.perform_player_action(2, action).unwrap();
+                });
+                ai3.play_turn(state.clone()).into_iter().for_each(|action| {
+                    state.perform_player_action(3, action).unwrap();
+                });
             }
             //panic!("\n{:#?}\n", state);
         }

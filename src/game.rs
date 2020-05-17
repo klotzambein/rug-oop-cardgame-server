@@ -1,3 +1,4 @@
+use core::str::FromStr;
 use std::slice::Iter;
 
 use rand::prelude::*;
@@ -7,8 +8,8 @@ use crate::cards::{Card, Pile, Rank, SpecialPile, Suit};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoundState {
-    player: u8,
-    turn_state: TurnState,
+    pub player: u8,
+    pub turn_state: TurnState,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,10 +33,51 @@ impl HousePile {
     }
 }
 
+impl FromStr for HousePile {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "1" => HousePile::One,
+            "2" => HousePile::Two,
+            "3" => HousePile::Three,
+            _ => Err(())?,
+        })
+    }
+}
+
+impl ToString for HousePile {
+    fn to_string(&self) -> String {
+        match self {
+            HousePile::One => "1".to_owned(),
+            HousePile::Two => "2".to_owned(),
+            HousePile::Three => "3".to_owned(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlayerPile {
     KingPile,
     HousePile(HousePile),
+}
+
+impl FromStr for PlayerPile {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "k" => PlayerPile::KingPile,
+            s => PlayerPile::HousePile(HousePile::from_str(s)?),
+        })
+    }
+}
+
+impl ToString for PlayerPile {
+    fn to_string(&self) -> String {
+        match self {
+            PlayerPile::KingPile => "k".to_owned(),
+            PlayerPile::HousePile(h) => h.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -50,6 +92,65 @@ pub enum PlayerAction {
     },
     SwapHousePile(HousePile, HousePile),
     DiscardHand,
+}
+
+impl FromStr for PlayerAction {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() < 6 {
+            Err(())?
+        }
+        Ok(match (&s[..6], &s[6..]) {
+            ("atck:", s) => {
+                if s.len() != 2 {
+                    Err(())?
+                }
+                PlayerAction::Attack {
+                    house_pile: HousePile::from_str(&s[0..1])?,
+                    target_player: Suit::from_str(&s[1..2])?,
+                }
+            }
+            ("actp:", s) => {
+                if s.len() != 3 {
+                    Err(())?
+                }
+                PlayerAction::AddCardToPile {
+                    pile: PlayerPile::from_str(&s[0..1])?,
+                    card: Card::from_str(&s[1..3])?,
+                }
+            }
+            ("swap:", s) => {
+                if s.len() != 2 {
+                    Err(())?
+                }
+                let a = HousePile::from_str(&s[0..1])?;
+                let b = HousePile::from_str(&s[1..2])?;
+                PlayerAction::SwapHousePile(a, b)
+            }
+            ("dscd:", "") => PlayerAction::DiscardHand,
+            _ => Err(())?,
+        })
+    }
+}
+
+impl ToString for PlayerAction {
+    fn to_string(&self) -> String {
+        match self {
+            PlayerAction::Attack {
+                house_pile,
+                target_player,
+            } => format!(
+                "atck:{}{}",
+                house_pile.to_string(),
+                target_player.to_string()
+            ),
+            PlayerAction::AddCardToPile { pile, card } => {
+                format!("actp:{}{}", pile.to_string(), card.to_string())
+            }
+            PlayerAction::SwapHousePile(a, b) => format!("swap:{}{}", a.to_string(), b.to_string()),
+            PlayerAction::DiscardHand => format!("dscd:"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -68,9 +169,9 @@ impl GameState {
             .add_without_kings()
             .add_blank_without_kings(4)
             .shuffled(&mut rng);
-        GameState {
+        let mut game = GameState {
             round_state: RoundState {
-                player: 0,
+                player: 3,
                 turn_state: TurnState::Attack,
             },
             rng,
@@ -82,7 +183,9 @@ impl GameState {
                 PlayerState::initial(Suit::Diamond),
                 PlayerState::initial(Suit::Club),
             ],
-        }
+        };
+        game.next_player();
+        game
     }
 
     pub fn evaluate_house_pile_value(pile: &SpecialPile) -> u32 {
@@ -124,11 +227,12 @@ impl GameState {
         self.players.iter_mut().find(|ps| ps.suit == player)
     }
 
+    // Returns Some(player) when it is the next players turn. Returns none otherwise.
     pub fn perform_player_action(
         &mut self,
         player: u8,
         action: PlayerAction,
-    ) -> Result<(), &'static str> {
+    ) -> Result<PlayerActionResult, &'static str> {
         if player != self.round_state.player {
             Err("not your turn")?;
         }
@@ -207,10 +311,15 @@ impl GameState {
                 let hand = std::mem::take(&mut player.hand);
                 self.discard_pile.add_pile(hand);
                 self.next_player();
+                return Ok(PlayerActionResult::NextPlayer(self.round_state.player));
             }
         }
 
-        Ok(())
+        if self.players[player as usize].king_pile.cards.count() == 9 {
+            Ok(PlayerActionResult::GameWon(player))
+        } else {
+            Ok(PlayerActionResult::Nominal)
+        }
     }
 
     fn next_player(&mut self) {
@@ -311,4 +420,11 @@ impl PlayerState {
         }
         piles
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum PlayerActionResult {
+    Nominal,
+    NextPlayer(u8),
+    GameWon(u8),
 }
