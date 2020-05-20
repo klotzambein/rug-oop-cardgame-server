@@ -8,8 +8,21 @@ use crate::cards::{Card, Pile, Rank, SpecialPile, Suit};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoundState {
-    pub player: u8,
+    pub player: usize,
     pub turn_state: TurnState,
+}
+
+impl ToString for RoundState {
+    fn to_string(&self) -> std::string::String {
+        format!(
+            "{}{}",
+            self.player,
+            match self.turn_state {
+                TurnState::Attack => 'a',
+                TurnState::Organize => 'o',
+            }
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,10 +110,10 @@ pub enum PlayerAction {
 impl FromStr for PlayerAction {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.len() < 6 {
+        if s.len() < 5 {
             Err(())?
         }
-        Ok(match (&s[..6], &s[6..]) {
+        Ok(match (&s[..5], &s[5..]) {
             ("atck:", s) => {
                 if s.len() != 2 {
                     Err(())?
@@ -190,9 +203,9 @@ impl GameState {
 
     pub fn evaluate_house_pile_value(pile: &SpecialPile) -> u32 {
         match pile.special_card.rank {
-            Rank::Jack => pile.cards.count(),
-            Rank::Ace => pile.cards.count() + pile.cards.contains_rank(Rank::Two) as u32,
-            Rank::Queen => pile.cards.count() * 2,
+            Rank::Jack => pile.cards.count() as u32,
+            Rank::Ace => pile.cards.count() as u32 + pile.cards.contains_rank(Rank::Two) as u32,
+            Rank::Queen => pile.cards.count() as u32 * 2,
             _ => panic!("Invalid house pile special card. ({:?})", pile),
         }
     }
@@ -230,7 +243,7 @@ impl GameState {
     // Returns Some(player) when it is the next players turn. Returns none otherwise.
     pub fn perform_player_action(
         &mut self,
-        player: u8,
+        player: usize,
         action: PlayerAction,
     ) -> Result<PlayerActionResult, &'static str> {
         if player != self.round_state.player {
@@ -331,11 +344,51 @@ impl GameState {
         self.round_state.turn_state = TurnState::Attack;
 
         self.round_state.player += 1;
-        self.round_state.player %= self.players.len() as u8;
+        self.round_state.player %= self.players.len();
 
         self.players[self.round_state.player as usize]
             .hand
             .add_pile(hand);
+    }
+
+    pub fn hand_to_string(&self) -> String {
+        let player = &self.players[self.round_state.player];
+        let hand = &player.hand;
+        let mut s = format!("{}", hand.count());
+        for c in hand.iter() {
+            s += &c.to_string();
+            let k = GameState::can_add_to_house_pile(&player.king_pile, c);
+            let h1 = player
+                .house_pile_1
+                .as_ref()
+                .map(|sp| GameState::can_add_to_house_pile(sp, c))
+                .unwrap_or(false);
+            let h2 = player
+                .house_pile_2
+                .as_ref()
+                .map(|sp| GameState::can_add_to_house_pile(sp, c))
+                .unwrap_or(false);
+            let h3 = player
+                .house_pile_3
+                .as_ref()
+                .map(|sp| GameState::can_add_to_house_pile(sp, c))
+                .unwrap_or(false);
+            s.push(if k { '+' } else { '-' });
+            s.push(if h1 { '+' } else { '-' });
+            s.push(if h2 { '+' } else { '-' });
+            s.push(if h3 { '+' } else { '-' });
+        }
+        s
+    }
+}
+
+impl ToString for GameState {
+    fn to_string(&self) -> String {
+        let mut s = self.round_state.to_string();
+        for p in &self.players {
+            s += &p.to_string();
+        }
+        s
     }
 }
 
@@ -422,9 +475,27 @@ impl PlayerState {
     }
 }
 
+impl ToString for PlayerState {
+    fn to_string(&self) -> String {
+        fn opt_sp_to_string(hp: &Option<SpecialPile>) -> String {
+            match hp.as_ref() {
+                Some(sp) => sp.to_string(),
+                None => "?".to_owned(),
+            }
+        }
+        format!(
+            "{}{}{}{}",
+            self.king_pile.to_string(),
+            opt_sp_to_string(&self.house_pile_1),
+            opt_sp_to_string(&self.house_pile_2),
+            opt_sp_to_string(&self.house_pile_3),
+        )
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum PlayerActionResult {
     Nominal,
-    NextPlayer(u8),
-    GameWon(u8),
+    NextPlayer(usize),
+    GameWon(usize),
 }

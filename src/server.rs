@@ -1,13 +1,15 @@
+use serde::Deserializer;
 use std::collections::{hash_map::Entry, HashMap};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::{
     fmt::Display,
+    str::FromStr,
     time::{Duration, Instant},
 };
 
 use futures::{stream, StreamExt};
-use serde::Deserialize;
+use serde::{de, Deserialize};
 use tokio::{sync::broadcast, time::interval};
 use warp::{path, path::param, query, reject, sse, Filter, Rejection, Reply};
 
@@ -26,6 +28,24 @@ struct GameInner {
     state: GameState,
     players: Vec<Player>,
     is_started: bool,
+}
+
+impl GameInner {
+    pub fn get_player(&self, auth: &str) -> Option<usize> {
+        let (player, _) = self
+            .players
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| {
+                if let Player::RealPlayer(p) = p {
+                    Some((i, p))
+                } else {
+                    None
+                }
+            })
+            .find(|(_, p)| p == &auth)?;
+        Some(player)
+    }
 }
 
 impl Game {
@@ -69,17 +89,17 @@ impl Game {
         let mut inner = self.inner.lock().unwrap();
         let result = inner
             .state
-            .perform_player_action(player as u8, action.clone())
+            .perform_player_action(player, action.clone())
             .unwrap();
 
+        let state = inner.state.clone();
         drop(inner);
 
-        self.broadcast(GameEvent::PlayerAction(player as u8, action));
+        self.broadcast(GameEvent::GameStateChanged(state));
 
         match result {
             PlayerActionResult::Nominal => false,
-            PlayerActionResult::NextPlayer(next_player) => {
-                self.broadcast(GameEvent::PlayersTurn(next_player));
+            PlayerActionResult::NextPlayer(_) => {
                 self.check_play_ai();
                 false
             }
@@ -97,7 +117,7 @@ impl Game {
             inner.is_started = true;
             drop(inner);
 
-            self.broadcast(GameEvent::FullGameState(state));
+            self.broadcast(GameEvent::GameStateChanged(state));
             self.check_play_ai();
         }
     }
@@ -135,20 +155,24 @@ enum Player {
 
 #[derive(Clone, Debug)]
 enum GameEvent {
-    FullGameState(GameState),
-    PlayerAction(u8, PlayerAction),
-    PlayersTurn(u8),
-    GameWon(u8),
+    GameStateChanged(GameState),
+    GameWon(usize),
 }
 
-impl ToString for GameEvent {
-    fn to_string(&self) -> String {
+impl GameEvent {
+    fn to_string(&self, player: usize) -> String {
         match self {
-            GameEvent::FullGameState(state) => format!("state:{:?}", state),
-            GameEvent::PlayerAction(player, action) => {
-                format!("pturn:{}{}", player, action.to_string())
+            GameEvent::GameStateChanged(state) => {
+                if player == state.round_state.player {
+                    format!(
+                        "state:{}\nhand:{}",
+                        state.to_string(),
+                        state.hand_to_string()
+                    )
+                } else {
+                    format!("state:{}", state.to_string())
+                }
             }
-            GameEvent::PlayersTurn(player) => format!("nturn:{}", player),
             GameEvent::GameWon(winner) => format!("gmwon:{}", winner),
         }
     }
@@ -164,6 +188,7 @@ enum ServerError {
     PathError,
     InternalError,
     GameNotFound,
+    InvalidAuth,
 }
 impl Display for ServerError {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -200,18 +225,35 @@ impl Server {
         param().and_then(move |game_id| get_game(this.clone(), game_id))
     }
 
-    fn map_game_event_stream(game: Arc<Game>) -> impl Reply {
+    fn auth_filter(&self) -> impl Filter<Extract = (String,), Error = Rejection> + Clone {
+        async fn parse_auth(auth: String) -> Result<String, Rejection> {
+            let mut iter = auth.split_ascii_whitespace();
+            let auth_type = iter.next().ok_or(ServerError::InvalidAuth)?;
+            let auth_str = iter.next().ok_or(ServerError::InvalidAuth)?;
+            if auth_type != "Basic" || iter.next().is_some() {
+                Err(ServerError::InvalidAuth)?
+            }
+            Ok(auth_str.to_owned())
+        }
+        warp::header("Authorization").and_then(|auth: String| parse_auth(auth))
+    }
+
+    fn map_game_event_stream(game: Arc<Game>, auth: &str) -> Result<impl Reply, Rejection> {
+        let inner = game.inner.lock().unwrap();
+
+        let player = inner.get_player(auth).ok_or(ServerError::InvalidAuth)?;
+
+        let state = inner.state.clone();
+        drop(inner);
+
         let event_stream = game.notify_change.subscribe();
-        let state_stream = stream::once(async move {
-            Ok(GameEvent::FullGameState(
-                game.inner.lock().unwrap().state.clone(),
-            ))
-        });
+        let state_stream = stream::once(async move { Ok(GameEvent::GameStateChanged(state)) });
         let both = stream::select(state_stream, event_stream);
-        sse::reply(both.map(|event| match event {
-            Ok(event) => Ok(sse::data(format!("{}", event.to_string()))),
+
+        Ok(sse::reply(both.map(move |event| match event {
+            Ok(event) => Ok(sse::data(format!("{}", event.to_string(player)))),
             Err(_) => Err(ServerError::InternalError),
-        }))
+        })))
     }
 
     fn create_game(&self, ai_player_count: u8) -> u64 {
@@ -228,26 +270,41 @@ impl Server {
     }
 
     pub async fn serve(&self, addr: impl Into<SocketAddr> + 'static) {
+        let log = warp::log("web_api");
+
+        // server.com/api/v0/game/stream/9a8sfus3/
         let stream = path("stream")
             .and(self.get_game_filter())
             .and(path::end())
             .and(warp::get())
-            .map(Server::map_game_event_stream);
-
+            .and(self.auth_filter())
+            .and_then(|x, auth: String| async move { Server::map_game_event_stream(x, &auth) });
+        // server.com/api/v0/game/join/9a8sfus3/
         let join = path("join")
             .and(self.get_game_filter())
             .and(path::end())
             .and(warp::post())
             .map(|game: Arc<Game>| game.join_player().unwrap_or("Error".to_string()));
 
+        // server.com/api/v0/game/action/9a8sfus3/?action=2s
         let action = path("action")
             .and(self.get_game_filter())
             .and(path::end())
             .and(warp::post())
-            .and_then(|game| async {
-                let result: Result<&'static str, Rejection> = Ok("()");
-                result
-            });
+            .and(self.auth_filter())
+            .and(query())
+            .and_then(
+                |game: Arc<Game>, auth: String, query: ActionQuery| async move {
+                    println!("{},{:?}", auth, &query);
+                    let inner = game.inner.lock().unwrap();
+                    let player = inner.get_player(&auth).ok_or(ServerError::InvalidAuth)?;
+                    drop(inner);
+                    game.perform_player_action(player, query.action);
+
+                    let result: Result<&'static str, Rejection> = Ok("success");
+                    result
+                },
+            );
 
         let self2 = self.clone();
         let create = path!("create")
@@ -255,9 +312,9 @@ impl Server {
             .and(query())
             .map(move |query: CreateQuery| format!("{:016x}", self2.create_game(query.ai_players)));
 
-        let game = path("game").and(stream.or(join));
+        let game = path("game").and(stream.or(join).or(action));
 
-        let api = path!("api" / "v0" / ..).and(game.or(create).or(action));
+        let api = path!("api" / "v0" / ..).and(game.or(create)).with(log);
 
         warp::serve(api).run(addr).await;
     }
@@ -267,4 +324,19 @@ impl Server {
 struct CreateQuery {
     ai_players: u8,
     auto_join: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ActionQuery {
+    #[serde(deserialize_with = "str_to_player_action")]
+    action: PlayerAction,
+}
+
+fn str_to_player_action<'de, D>(deserializer: D) -> Result<PlayerAction, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    println!("{:?}", &s);
+    FromStr::from_str(&s).map_err(|_| de::Error::custom("Error while deserializing PlayerAction"))
 }

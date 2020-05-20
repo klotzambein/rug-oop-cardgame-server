@@ -14,3 +14,4 @@ warp = "0.2"
 serde = { version = "1.0.110", features = ["derive"] }
 futures = "0.3.5"
 base64 = "0.12.1"
+pretty_env_logger = "0.4.0"

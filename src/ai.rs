@@ -131,7 +131,7 @@ impl AIPlayer {
                     target_player: suit,
                 };
                 state
-                    .perform_player_action(self.player_id as u8, attack.clone())
+                    .perform_player_action(self.player_id, attack.clone())
                     .unwrap();
                 actions.push(attack)
             }
@@ -150,7 +150,7 @@ impl AIPlayer {
             let action = PlayerAction::AddCardToPile { pile, card };
             actions.push(action.clone());
             state
-                .perform_player_action(self.player_id as u8, action)
+                .perform_player_action(self.player_id, action)
                 .unwrap();
         }
 

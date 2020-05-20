@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use std::{
-    fmt::{Debug, Formatter},
+    fmt::{Debug, Formatter, Write},
     iter::Copied,
     slice::Iter,
 };
@@ -233,8 +233,8 @@ impl Pile {
         self
     }
 
-    pub fn count(&self) -> u32 {
-        self.cards.len() as u32
+    pub fn count(&self) -> usize {
+        self.cards.len()
     }
 
     pub fn contains_rank(&self, rank: Rank) -> bool {
@@ -299,6 +299,22 @@ impl Debug for Pile {
     }
 }
 
+impl ToString for Pile {
+    fn to_string(&self) -> String {
+        let len = self.count();
+        let mut s = String::with_capacity(len * 2 + 2);
+
+        assert!(len < 100);
+        write!(s, "{:02}", len).unwrap();
+
+        for c in self.iter() {
+            s += &c.to_string();
+        }
+
+        s
+    }
+}
+
 /// A Pile with at least one card, this card specifies what card can go on the
 /// pile and how the pile is interpreted.
 #[derive(Debug, Clone)]
@@ -313,5 +329,23 @@ impl SpecialPile {
             special_card,
             cards: Pile::new(),
         }
+    }
+}
+
+impl ToString for SpecialPile {
+    fn to_string(&self) -> String {
+        let len = self.cards.count() + 1;
+        let mut s = String::with_capacity(len * 2 + 2);
+
+        assert!(len < 100);
+        write!(s, "{:02}", len).unwrap();
+
+        s += &self.special_card.to_string();
+
+        for c in self.cards.iter() {
+            s += &c.to_string();
+        }
+
+        s
     }
 }
