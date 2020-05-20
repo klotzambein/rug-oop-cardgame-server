@@ -272,21 +272,21 @@ impl Server {
     pub async fn serve(&self, addr: impl Into<SocketAddr> + 'static) {
         let log = warp::log("web_api");
 
-        // server.com/api/v0/game/stream/9a8sfus3/
+        // GET server.com/api/v0/game/stream/123abc/ (with basic Auth)
         let stream = path("stream")
             .and(self.get_game_filter())
             .and(path::end())
             .and(warp::get())
             .and(self.auth_filter())
             .and_then(|x, auth: String| async move { Server::map_game_event_stream(x, &auth) });
-        // server.com/api/v0/game/join/9a8sfus3/
+        // POST server.com/api/v0/game/join/123abc/
         let join = path("join")
             .and(self.get_game_filter())
             .and(path::end())
             .and(warp::post())
             .map(|game: Arc<Game>| game.join_player().unwrap_or("Error".to_string()));
 
-        // server.com/api/v0/game/action/9a8sfus3/?action=2s
+        // POST server.com/api/v0/game/action/123abc/?action=dscd (with basic Auth)
         let action = path("action")
             .and(self.get_game_filter())
             .and(path::end())
@@ -307,6 +307,7 @@ impl Server {
             );
 
         let self2 = self.clone();
+        // POST server.com/api/v0/game/create/?ai_players=3
         let create = path!("create")
             .and(warp::post())
             .and(query())
@@ -323,7 +324,6 @@ impl Server {
 #[derive(Deserialize)]
 struct CreateQuery {
     ai_players: u8,
-    auto_join: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
