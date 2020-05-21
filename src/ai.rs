@@ -149,9 +149,7 @@ impl AIPlayer {
         {
             let action = PlayerAction::AddCardToPile { pile, card };
             actions.push(action.clone());
-            state
-                .perform_player_action(self.player_id, action)
-                .unwrap();
+            state.perform_player_action(self.player_id, action).unwrap();
         }
 
         //TODO: Reorder cards:
