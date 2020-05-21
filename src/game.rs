@@ -357,22 +357,10 @@ impl GameState {
         let mut s = format!("{}", hand.count());
         for c in hand.iter() {
             s += &c.to_string();
-            let k = GameState::can_add_to_house_pile(&player.king_pile, c);
-            let h1 = player
-                .house_pile_1
-                .as_ref()
-                .map(|sp| GameState::can_add_to_house_pile(sp, c))
-                .unwrap_or(false);
-            let h2 = player
-                .house_pile_2
-                .as_ref()
-                .map(|sp| GameState::can_add_to_house_pile(sp, c))
-                .unwrap_or(false);
-            let h3 = player
-                .house_pile_3
-                .as_ref()
-                .map(|sp| GameState::can_add_to_house_pile(sp, c))
-                .unwrap_or(false);
+            let k = player.can_add_card_to_pile(PlayerPile::KingPile, c);
+            let h1 = player.can_add_card_to_pile(PlayerPile::HousePile(HousePile::One), c);
+            let h2 = player.can_add_card_to_pile(PlayerPile::HousePile(HousePile::Two), c);
+            let h3 = player.can_add_card_to_pile(PlayerPile::HousePile(HousePile::Three), c);
             s.push(if k { '+' } else { '-' });
             s.push(if h1 { '+' } else { '-' });
             s.push(if h2 { '+' } else { '-' });
@@ -414,6 +402,12 @@ impl PlayerState {
         }
     }
 
+    pub fn get_pile(&self, pile: PlayerPile) -> Option<&SpecialPile> {
+        match pile {
+            PlayerPile::KingPile => Some(&self.king_pile),
+            PlayerPile::HousePile(pile) => self.get_house_pile(pile).as_ref(),
+        }
+    }
     pub fn get_mut_pile(&mut self, pile: PlayerPile) -> Option<&mut SpecialPile> {
         match pile {
             PlayerPile::KingPile => Some(&mut self.king_pile),
@@ -472,6 +466,26 @@ impl PlayerState {
             piles.push((HousePile::Three, p));
         }
         piles
+    }
+
+    fn can_add_card_to_pile(&self, pile: PlayerPile, card: Card) -> bool {
+        match card.rank {
+            Rank::King => unreachable!(),
+            Rank::Queen | Rank::Jack | Rank::Ace => match pile {
+                PlayerPile::KingPile => false,
+                PlayerPile::HousePile(p) => {
+                    let pile = self.get_house_pile(p);
+                    pile.is_none()
+                }
+            },
+            _ => {
+                if let Some(pile) = self.get_pile(pile) {
+                    GameState::can_add_to_house_pile(&pile, card)
+                } else {
+                    false
+                }
+            }
+        }
     }
 }
 
