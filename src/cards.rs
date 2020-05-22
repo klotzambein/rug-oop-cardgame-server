@@ -51,7 +51,7 @@ impl ToString for Suit {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Rank {
     King = 13,
     Queen = 12,
@@ -160,6 +160,17 @@ impl Rank {
 pub struct Card {
     pub suit: Suit,
     pub rank: Rank,
+}
+
+impl Ord for Card {
+    fn cmp(&self, card: &Card) -> std::cmp::Ordering {
+        self.rank.cmp(&card.rank)
+    }
+}
+impl PartialOrd<Card> for Card {
+    fn partial_cmp(&self, card: &Card) -> Option<std::cmp::Ordering> {
+        self.rank.partial_cmp(&card.rank)
+    }
 }
 
 impl FromStr for Card {
@@ -289,6 +300,10 @@ impl Pile {
     pub fn iter(&self) -> Copied<Iter<'_, Card>> {
         self.cards.iter().copied()
     }
+
+    pub fn sort(&mut self) {
+        self.cards.sort();
+    } 
 }
 
 impl Debug for Pile {
@@ -329,6 +344,10 @@ impl SpecialPile {
             special_card,
             cards: Pile::new(),
         }
+    }
+
+    pub fn sort(&mut self) {
+        self.cards.sort()
     }
 }
 

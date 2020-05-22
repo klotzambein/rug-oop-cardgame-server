@@ -308,6 +308,7 @@ impl GameState {
                                 .ok_or("this pile does not exist")?;
                             if GameState::can_add_to_house_pile(&pile, card) {
                                 pile.cards.add(card);
+                                pile.sort();
                             } else {
                                 Err("this card can not be added to this pile")?;
                             }

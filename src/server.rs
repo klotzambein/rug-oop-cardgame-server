@@ -12,6 +12,7 @@ use futures::{stream, StreamExt};
 use serde::{de, Deserialize};
 use tokio::{sync::broadcast, time::interval};
 use warp::{path, path::param, query, reject, sse, Filter, Rejection, Reply};
+use log::warn;
 
 use crate::ai::AIPlayer;
 use crate::game::{GameState, PlayerAction, PlayerActionResult};
@@ -87,10 +88,15 @@ impl Game {
     // returns true of the game is won.
     pub fn perform_player_action(self: &Arc<Self>, player: usize, action: PlayerAction) -> bool {
         let mut inner = self.inner.lock().unwrap();
-        let result = inner
-            .state
-            .perform_player_action(player, action.clone())
-            .unwrap();
+        let state_bkup = inner.state.clone();
+        let result = match inner.state.perform_player_action(player, action.clone()) {
+            Ok(result) => result,
+            Err(err) => {
+                warn!("Error occurred while performing player action: {}", err);
+                inner.state = state_bkup;
+                PlayerActionResult::Nominal
+            },
+        };
 
         let state = inner.state.clone();
         drop(inner);
